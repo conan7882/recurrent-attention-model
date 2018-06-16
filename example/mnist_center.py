@@ -24,12 +24,8 @@ elif platform.node() == 'arostitan':
     SAVE_PATH = '/home/qge2/workspace/data/out/ram/'
 else:
     DATA_PATH = 'E://Dataset//MNIST//'
-    SAVE_PATH = 'E:/tmp/tmp/'
-
-# BATCH_SIZE = 64 
-# N_STEP = 3
-# N_SAMPLE = 10
-# GLIMPSE_SIZE = 12.0
+    SAVE_PATH = 'E:/tmp/ram/trans/'
+    RESULT_PATH = 'E:/tmp/ram/trans/result/'
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -41,6 +37,8 @@ def get_args():
                         help='Test')
     parser.add_argument('--trans', action='store_true',
                         help='Transform image')
+    parser.add_argument('--center', action='store_true',
+                        help='Center')
 
     parser.add_argument('--step', type=int, default=1,
                         help='Number of glimpse')
@@ -50,8 +48,18 @@ def get_args():
                         help='Glimpse base size')
     parser.add_argument('--batch', type=int, default=128,
                         help='Batch size')
-    parser.add_argument('--epoch', type=int, default=100,
+    parser.add_argument('--epoch', type=int, default=1000,
                         help='Max number of epoch')
+    parser.add_argument('--load', type=int, default=100,
+                        help='Load pretrained parameters with id')
+    parser.add_argument('--lr', type=float, default=1e-3,
+                        help='Init learning rate')
+    parser.add_argument('--std', type=float, default=0.11,
+                        help='std of location')
+    parser.add_argument('--pixel', type=int, default=26,
+                        help='unit_pixel')
+    parser.add_argument('--scale', type=int, default=3,
+                        help='scale of glimpse')
     
     return parser.parse_args()
 
@@ -62,17 +70,17 @@ class config_center():
     n_scales = 1
     batch = 128
     epoch = 1000
-    loc_std = 0.11
+    loc_std = 0.03
     unit_pixel = 12
 
 class config_transform():
     step = 6
-    sample = 2
+    sample = 1
     glimpse = 12
     n_scales = 3
     batch = 128
-    epoch = 2700
-    loc_std = 0.22
+    epoch = 2000
+    loc_std = 0.03
     unit_pixel = 26
 
 if __name__ == '__main__':
@@ -80,9 +88,23 @@ if __name__ == '__main__':
     if FLAGS.trans:
         name = 'trans'
         config = config_transform()
-    else:
+    elif FLAGS.center:
         name = 'centered'
         config = config_center()
+    else:
+        FLAGS.trans = True
+        name = 'custom'
+        class config_FLAGS():
+            step = FLAGS.step
+            sample = FLAGS.sample
+            glimpse = FLAGS.glimpse
+            n_scales = FLAGS.scale
+            batch = FLAGS.batch
+            epoch = FLAGS.epoch
+            loc_std = FLAGS.std
+            unit_pixel = FLAGS.pixel
+        config = config_FLAGS()
+
 
     train_data = MNISTData('train', data_dir=DATA_PATH, shuffle=True)
     train_data.setup(epoch_val=0, batch_size=config.batch)
@@ -102,11 +124,10 @@ if __name__ == '__main__':
                               is_transform=FLAGS.trans)
     model.create_model()
 
-    trainer = Trainer(model, train_data)
+    trainer = Trainer(model, train_data, init_lr=FLAGS.lr)
     writer = tf.summary.FileWriter(SAVE_PATH)
     saver = tf.train.Saver()
 
-    # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
     sessconfig = tf.ConfigProto()
     sessconfig.gpu_options.allow_growth = True
     with tf.Session(config=sessconfig) as sess:
@@ -114,12 +135,13 @@ if __name__ == '__main__':
         if FLAGS.train:
             writer.add_graph(sess.graph)
             for step in range(0, config.epoch):
-                trainer.train_epoch(sess, summary_writer=None)
+                trainer.train_epoch(sess, summary_writer=writer)
                 trainer.valid_epoch(sess, valid_data, config.batch)
+
                 saver.save(sess, '{}ram-{}-mnist-step-{}'.format(SAVE_PATH, name, config.step), global_step=step)
         if FLAGS.predict:
-            valid_data.setup(epoch_val=0, batch_size=30)
-            saver.restore(sess, '{}ram-centered-mnist-step-6-999'.format(SAVE_PATH))
+            valid_data.setup(epoch_val=0, batch_size=20)
+            saver.restore(sess, '{}ram-{}-mnist-step-6-{}'.format(SAVE_PATH, name, FLAGS.load))
             
             batch_data = valid_data.next_batch_dict()
             trainer.test_batch(
