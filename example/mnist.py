@@ -22,6 +22,7 @@ if platform.node() == 'Qians-MacBook-Pro.local':
 elif platform.node() == 'arostitan':
     DATA_PATH = '/home/qge2/workspace/data/MNIST_data/'
     SAVE_PATH = '/home/qge2/workspace/data/out/ram/'
+    RESULT_PATH = '/home/qge2/workspace/data/out/ram/'
 else:
     DATA_PATH = 'E://Dataset//MNIST//'
     SAVE_PATH = 'E:/tmp/ram/trans/'
@@ -160,7 +161,6 @@ if __name__ == '__main__':
                 feed_dict={model.image: batch_data['data'],
                            model.label: batch_data['label'],
                            })
-            # print(test.shape)
             tt = 0
             for glimpse_i, trans, im in zip(test, trans_im, batch_data['data']):
                 scipy.misc.imsave('{}trans_{}.png'.format(SAVE_PATH, tt),
