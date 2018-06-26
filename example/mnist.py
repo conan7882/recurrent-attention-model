@@ -15,18 +15,9 @@ from lib.dataflow.mnist import MNISTData
 from lib.model.ram import RAMClassification
 from lib.helper.trainer import Trainer
 
-if platform.node() == 'Qians-MacBook-Pro.local':
-    DATA_PATH = '/Users/gq/Google Drive/Foram/CNN Data/code/GAN/MNIST_data/'
-    SAVE_PATH = '/Users/gq/tmp/ram/center/'
-    RESULT_PATH = '/Users/gq/tmp/ram/center/result/'
-elif platform.node() == 'arostitan':
-    DATA_PATH = '/home/qge2/workspace/data/MNIST_data/'
-    SAVE_PATH = '/home/qge2/workspace/data/out/ram/'
-    RESULT_PATH = '/home/qge2/workspace/data/out/ram/'
-else:
-    DATA_PATH = 'E://Dataset//MNIST//'
-    SAVE_PATH = 'E:/tmp/ram/trans/'
-    RESULT_PATH = 'E:/tmp/ram/trans/result/'
+DATA_PATH = '/home/qge2/workspace/data/MNIST_data/'
+SAVE_PATH = '/home/qge2/workspace/data/out/ram/'
+RESULT_PATH = '/home/qge2/workspace/data/out/ram/'
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -106,7 +97,6 @@ if __name__ == '__main__':
             unit_pixel = FLAGS.pixel
         config = config_FLAGS()
 
-
     train_data = MNISTData('train', data_dir=DATA_PATH, shuffle=True)
     train_data.setup(epoch_val=0, batch_size=config.batch)
     valid_data = MNISTData('val', data_dir=DATA_PATH, shuffle=True)
@@ -138,11 +128,17 @@ if __name__ == '__main__':
             for step in range(0, config.epoch):
                 trainer.train_epoch(sess, summary_writer=writer)
                 trainer.valid_epoch(sess, valid_data, config.batch)
+                saver.save(sess, 
+                           '{}ram-{}-mnist-step-{}'
+                           .format(SAVE_PATH, name, config.step),
+                           global_step=step)
+                writer.close()
 
-                saver.save(sess, '{}ram-{}-mnist-step-{}'.format(SAVE_PATH, name, config.step), global_step=step)
         if FLAGS.predict:
             valid_data.setup(epoch_val=0, batch_size=20)
-            saver.restore(sess, '{}ram-{}-mnist-step-6-{}'.format(SAVE_PATH, name, FLAGS.load))
+            saver.restore(sess, 
+                          '{}ram-{}-mnist-step-6-{}'
+                          .format(SAVE_PATH, name, FLAGS.load))
             
             batch_data = valid_data.next_batch_dict()
             trainer.test_batch(
@@ -152,24 +148,3 @@ if __name__ == '__main__':
                 size=config.glimpse,
                 scale=config.n_scales,
                 save_path=RESULT_PATH)
-
-        if FLAGS.test:
-            train_data.setup(epoch_val=0, batch_size=2)
-            batch_data = train_data.next_batch_dict()
-            test, trans_im = sess.run(
-                [model.layers['retina_reprsent'], model.pad_im],
-                feed_dict={model.image: batch_data['data'],
-                           model.label: batch_data['label'],
-                           })
-            tt = 0
-            for glimpse_i, trans, im in zip(test, trans_im, batch_data['data']):
-                scipy.misc.imsave('{}trans_{}.png'.format(SAVE_PATH, tt),
-                                  np.squeeze(trans))
-                for idx in range(0, 3):
-                    scipy.misc.imsave('{}g_{}_{}.png'.format(SAVE_PATH, tt, idx), 
-                                      np.squeeze(glimpse_i[0,:,:,idx]))
-                scipy.misc.imsave('{}im_{}.png'.format(SAVE_PATH, tt), np.squeeze(im))
-                tt += 1
-        
-
-        # writer.close()
