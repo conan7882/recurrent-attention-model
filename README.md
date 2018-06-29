@@ -19,6 +19,7 @@
 
 ## Result
 ### Centered MNIST
+![center](figs/center.gif)
 
 ### Translated MNIST
 
