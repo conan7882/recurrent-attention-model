@@ -22,6 +22,7 @@
 ![center](figs/center.gif)
 
 ### Translated MNIST
+![trans](figs/trans.gif)
 
 ## Reference implementation:
 - https://github.com/jlindsey15/RAM
