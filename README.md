@@ -25,5 +25,6 @@
 ![trans](figs/trans.gif)
 
 ## Reference implementation:
+- http://torch.ch/blog/2015/09/21/rmva.html
 - https://github.com/jlindsey15/RAM
 - https://github.com/jtkim-kaist/ram_modified
