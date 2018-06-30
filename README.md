@@ -12,7 +12,7 @@
 
 ## Implementation Details
 - The RAM model is defined in [`lib/model/ram.py`](lib/model/ram.py).
-- An example of MNIST dataset classification is in [`example/pre_trained.py`](example/mnist.py).
+- An example of MNIST dataset classification is in [`example/mnist.py`](example/mnist.py).
 - The action network, core network and glimpse network are trained by the classification cross entropy loss.
 - The location network is trained by [REINFORCE](http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf).
 - The reward baseline network is trained by the MSE loss between baseline and reward.  
