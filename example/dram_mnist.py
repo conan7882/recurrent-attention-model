@@ -45,7 +45,7 @@ def get_args():
                         help='Max number of epoch')
     parser.add_argument('--load', type=int, default=100,
                         help='Load pretrained parameters with id')
-    parser.add_argument('--lr', type=float, default=1e-3,
+    parser.add_argument('--lr', type=float, default=1e-4,
                         help='Init learning rate')
     parser.add_argument('--std', type=float, default=0.03,
                         help='std of location')
@@ -112,7 +112,6 @@ if __name__ == '__main__':
                 sess, '{}dram-epoch-{}'.format(SAVE_PATH, FLAGS.load))
 
             batch_data = valid_data.next_batch_dict()
-            # test_im = batch_data['im'].astype(float)
             loc_list, pred, input_im, glimpses = sess.run(
                 [model.layers['l_sample'], model.layers['pred'],
                 model.image, model.layers['retina_reprsent']],
@@ -122,17 +121,11 @@ if __name__ == '__main__':
             pad_r = size * (2 ** (scale - 2))
             im_size = input_im[0].shape[0]
             loc_list = np.clip(np.array(loc_list), -l_range, l_range) / l_range
-            # print('loc_list')
-            # print(loc_list)
-                # print('test')
-                # print(test)
             loc_list = loc_list * 1.0 * (im_size / 2) / (im_size / 2 + pad_r)
             loc_list = (loc_list + 1.0) * 1.0 / 2 * (im_size + pad_r * 2)
-                # loc_list = (loc_list + l_range) * 1.0 * unit_pixel
             offset = pad_r
 
             print(pred)
-            # print(loc_list)
             for step_id, cur_loc in enumerate(loc_list):
                 im_id = 0
                 glimpse = glimpses[step_id]

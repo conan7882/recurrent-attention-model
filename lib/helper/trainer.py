@@ -42,7 +42,7 @@ class Trainer(object):
             step += 1
 
             batch_data = self._train_data.next_batch_dict()
-            im = batch_data['data']
+            im = batch_data['im']
             label = batch_data['label']
             _, loss, acc, cur_lr, cur_summary = sess.run(
                 [self._train_op, self._loss_op, self._accuracy_op, self._lr_op, self._sum_op], 
@@ -82,7 +82,7 @@ class Trainer(object):
             batch_data = dataflow.next_batch_dict()
             loss, acc = sess.run(
                 [self._loss_op, self._accuracy_op], 
-                feed_dict={self._model.image: batch_data['data'],
+                feed_dict={self._model.image: batch_data['im'],
                            self._model.label: batch_data['label'],
                            })
             loss_sum += loss
@@ -100,7 +100,7 @@ class Trainer(object):
 
         self._model.set_is_training(False)
         
-        test_im = batch_data['data']
+        test_im = batch_data['im']
         loc_list, pred, input_im, glimpses = sess.run(
             [self._sample_loc_op, self._pred_op, self._model.input_im,
              self._model.layers['retina_reprsent']],

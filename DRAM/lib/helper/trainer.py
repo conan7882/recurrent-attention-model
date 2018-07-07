@@ -17,11 +17,11 @@ class Trainer(object):
         self._train_data = train_data
         self._lr = init_lr
 
-        self._train_op = model.train_op()
+        self._train_op = model.get_train_op()
         self._loss_op = model.get_loss()
         self._accuracy_op = model.get_accuracy()
-        # self._sample_loc_op = model.layers['loc_sample']
-        # self._pred_op = model.layers['pred']
+        self._sample_loc_op = model.layers['loc_sample']
+        self._pred_op = model.layers['pred']
         self._sum_op = model.get_summary()
 
         self._lr_op = model.cur_lr

@@ -5,14 +5,16 @@
 
 import tensorflow as tf
 from tensorcv.models.base import BaseModel
+import tensorcv.models.layers as layers
 
 from lib.utils.utils import get_shape2D
 from lib.utils.tfutils import sample_normal_single
-import lib.model.layers as L
+import lib.models.layers as L
 
 
 class RAMClassification(BaseModel):
     def __init__(self,
+                 im_size,
                  im_channel,
                  glimpse_base_size,
                  n_glimpse_scale,
@@ -22,10 +24,9 @@ class RAMClassification(BaseModel):
                  max_grad_norm,
                  loc_std,
                  unit_pixel,
-                 is_transform=False,
                  transform_size=60):
 
-        self._is_transform = is_transform
+        self._im_size = layers.get_shape2D(im_size)
         self._trans_size = transform_size
         self._n_channel = im_channel
         self._g_size = glimpse_base_size
@@ -39,10 +40,11 @@ class RAMClassification(BaseModel):
 
         self.set_is_training(True)
 
+        self.layers = {}
+
     def create_model(self):
         self._create_input()
-        self.layers = {}
-        self.core_net(self.input_im)
+        self.core_net()
 
     def _create_input(self):
         self.lr = tf.placeholder(tf.float32, name='lr')
@@ -51,47 +53,13 @@ class RAMClassification(BaseModel):
                                     [None, None, None, self._n_channel],
                                     name='image')
 
-        if self._is_transform:
-            self.input_im = self._translate_image(self.image)
-        else:
-            self.input_im = self.image
-        self.input_label = self.label
-
-    def _translate_image(self, inputs_im):
-        """ Generate translate images """
-        with tf.name_scope('translation'):
-            trans_offset = int((self._trans_size - 28) / 2)
-            pad_im = tf.pad(
-                inputs_im,
-                paddings=tf.constant(
-                    [[0, 0], 
-                     [trans_offset, trans_offset],
-                     [trans_offset, trans_offset],
-                     [0, 0]]),
-                mode='CONSTANT',
-                name='pad_im',
-                constant_values=0
-                )
-
-            batch_size = tf.shape(inputs_im)[0]
-            translations = tf.random_uniform(
-                (batch_size, 2), minval=-trans_offset, maxval=trans_offset)
-            trans_im = tf.contrib.image.translate(
-                pad_im,
-                translations,
-                interpolation='NEAREST',
-                name=None
-                )
-
-            self.pad_im = trans_im
-            return trans_im
-
-    def core_net(self, inputs_im):
+    def core_net(self):
         self.layers['loc_mean'] = []
         self.layers['loc_sample'] = []
         self.layers['rnn_outputs'] = []
         self.layers['retina_reprsent'] = []
 
+        inputs_im = self.image
         cell_size = 256
         batch_size = tf.shape(inputs_im)[0]
 
@@ -113,10 +81,9 @@ class RAMClassification(BaseModel):
         h_prev = tf.zeros((batch_size, cell_size))
         for step_id in range(0, self._n_step):
             with tf.variable_scope('core_net'):
-                h = tf.nn.relu(
-                    L.Linear(h_prev, cell_size, 'lh')
-                             + L.Linear(glimpse_out, cell_size, 'lg'),
-                    name='h')
+                lh = L.linear(out_dim=cell_size, inputs=h_prev, name='lh')
+                lg = L.linear(out_dim=cell_size, inputs=glimpse_out, name='lg')
+                h = tf.nn.relu(lh + lg, name='h')
 
             # core net does not trained through locatiion net
             loc_mean = self.location_net(tf.stop_gradient(h))
@@ -124,8 +91,9 @@ class RAMClassification(BaseModel):
                 loc_sample = tf.stop_gradient(
                     sample_normal_single(loc_mean, stddev=self._l_std))
             else:
-                loc_sample = tf.stop_gradient(
-                    sample_normal_single(loc_mean, stddev=self._l_std))
+                loc_sample = loc_mean
+                # loc_sample = tf.stop_gradient(
+                #     sample_normal_single(loc_mean, stddev=self._l_std))
 
             glimpse_out = self.glimpse_net(inputs_im, loc_sample)
             action = self.action_net(h)
@@ -143,7 +111,7 @@ class RAMClassification(BaseModel):
         self.layers['pred'] = tf.argmax(action, axis=1)    
 
     def get_accuracy(self):
-        label = self.input_label
+        label = self.label
         if self.is_training:
                 label = tf.tile(label, [self._n_l_sample])
         pred = self.layers['pred']
@@ -151,22 +119,7 @@ class RAMClassification(BaseModel):
         return accuracy
 
     def get_train_op(self):
-        global_step = tf.get_variable(
-            'global_step',
-            [],
-            initializer=tf.constant_initializer(0),
-            trainable=False)
-        cur_lr = tf.train.exponential_decay(self.lr,
-                                            global_step=global_step,
-                                            # decay_steps=200,
-                                            decay_steps=500,
-                                            # decay_steps=1000,
-                                            decay_rate=0.97,
-                                            # decay_rate=0.99,
-                                            staircase=True,
-                                            )
-        cur_lr = tf.maximum(cur_lr, self.lr / 10.0)
-        self.cur_lr = cur_lr
+        self.cur_lr = self.lr
 
         loss = self.get_loss()
         var_list = tf.trainable_variables()
@@ -175,10 +128,8 @@ class RAMClassification(BaseModel):
          collections = [tf.GraphKeys.SUMMARIES])
          for grad, var in zip(grads, var_list)]
         grads, _ = tf.clip_by_global_norm(grads, self._max_grad_norm)
-        opt = tf.train.AdamOptimizer(cur_lr)
-        # opt = tf.train.RMSPropOptimizer(learning_rate=cur_lr)
-        train_op = opt.apply_gradients(zip(grads, var_list),
-                                       global_step=global_step)
+        opt = tf.train.AdamOptimizer(self.cur_lr)
+        train_op = opt.apply_gradients(zip(grads, var_list))
         return train_op
 
     def get_summary(self):
@@ -199,11 +150,7 @@ class RAMClassification(BaseModel):
 
             #TODO use clipped location to compute prob or not?
             l_sample = tf.clip_by_value(l_sample, -1.0, 1.0)
-
-            if self._is_transform:
-                l_sample_adj = l_sample * 1.0 * self._unit_pixel / (self._trans_size / 2 + max_r)
-            else:
-                l_sample_adj = l_sample * 1.0 * self._unit_pixel / (14 + max_r)
+            l_sample_adj = l_sample * 1.0 * self._unit_pixel / (self._im_size[0] / 2 + max_r)
             
             retina_reprsent = []
             for g_id in range(0, self._g_n):
@@ -229,25 +176,32 @@ class RAMClassification(BaseModel):
             
         with tf.variable_scope('glimpse_net'):
             out_dim = 128
-            hg = L.Linear(retina_reprsent, out_dim, name='hg', nl=tf.nn.relu)
-            hl = L.Linear(l_sample, out_dim, name='hl', nl=tf.nn.relu)
+            hg = L.linear(out_dim=out_dim,
+                          inputs=retina_reprsent,
+                          name='hg',
+                          nl=tf.nn.relu)
+            hl = L.linear(out_dim=out_dim,
+                          inputs=l_sample,
+                          name='hl',
+                          nl=tf.nn.relu)
 
             out_dim = 256
             g = tf.nn.relu(
-                L.Linear(hl, out_dim, 'lhg') + L.Linear(hg, out_dim, 'lhl'),
+                L.linear(out_dim, inputs=hl, name='lhg') 
+                + L.linear(out_dim, inputs=hg, name='lhl'),
                 name='g')
             return g
 
     def location_net(self, core_state):
         with tf.variable_scope('loc_net'):
-            l_mean = L.Linear(core_state, 2, name='l_mean')
+            l_mean = L.linear(out_dim=2, inputs=core_state, name='l_mean')
             # l_mean = tf.tanh(l_mean)
             l_mean = tf.clip_by_value(l_mean, -1., 1.)
             return l_mean
 
     def action_net(self, core_state):
         with tf.variable_scope('act_net'):
-            act = L.Linear(core_state, self._n_class, name='act')
+            act = L.linear(out_dim=self._n_class, inputs=core_state, name='act')
             return act
 
     def get_loss(self):
@@ -262,7 +216,7 @@ class RAMClassification(BaseModel):
 
     def _cls_loss(self):
         with tf.name_scope('class_cross_entropy'):
-            label = self.input_label
+            label = self.label
             if self.is_training:
                 label = tf.tile(label, [self._n_l_sample])
             logits = self.layers['class_logists']
@@ -273,7 +227,7 @@ class RAMClassification(BaseModel):
 
     def _REINFORCE(self):
         with tf.name_scope('REINFORCE'):
-            label = self.input_label
+            label = self.label
             if self.is_training:
                 label = tf.tile(label, [self._n_l_sample])
             pred = self.layers['pred']
@@ -303,7 +257,9 @@ class RAMClassification(BaseModel):
             rnn_outputs = tf.stop_gradient(self.layers['rnn_outputs'])
             baselines = []
             for step_id in range(0, self._n_step-1):
-                b = L.Linear(rnn_outputs[step_id], 1, name='baseline')
+                b = L.linear(out_dim=1,
+                             inputs=rnn_outputs[step_id],
+                             name='baseline')
                 b = tf.squeeze(b, axis=-1)
                 baselines.append(b)
             

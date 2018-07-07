@@ -9,10 +9,11 @@ import tensorflow as tf
 import platform
 import scipy.misc
 import argparse
+from read_mnist import trans_mnist
 
 sys.path.append('../')
 from lib.dataflow.mnist import MNISTData 
-from lib.model.ram import RAMClassification
+from lib.models.ram import RAMClassification
 from lib.helper.trainer import Trainer
 
 DATA_PATH = '/home/qge2/workspace/data/MNIST_data/'
@@ -64,6 +65,7 @@ class config_center():
     epoch = 1000
     loc_std = 0.03
     unit_pixel = 12
+    im_size = 28
 
 class config_transform():
     step = 6
@@ -74,6 +76,7 @@ class config_transform():
     epoch = 2000
     loc_std = 0.03
     unit_pixel = 26
+    im_size = 60
 
 if __name__ == '__main__':
     FLAGS = get_args()
@@ -97,12 +100,15 @@ if __name__ == '__main__':
             unit_pixel = FLAGS.pixel
         config = config_FLAGS()
 
-    train_data = MNISTData('train', data_dir=DATA_PATH, shuffle=True)
-    train_data.setup(epoch_val=0, batch_size=config.batch)
-    valid_data = MNISTData('val', data_dir=DATA_PATH, shuffle=True)
-    valid_data.setup(epoch_val=0, batch_size=10)
+    train_data, valid_data = trans_mnist(trans_size=config.im_size, batch_size=config.batch)
+
+    # train_data = MNISTData('train', data_dir=DATA_PATH, shuffle=True)
+    # train_data.setup(epoch_val=0, batch_size=config.batch)
+    # valid_data = MNISTData('val', data_dir=DATA_PATH, shuffle=True)
+    # valid_data.setup(epoch_val=0, batch_size=10)
 
     model = RAMClassification(
+                              im_size=config.im_size,
                               im_channel=1,
                               glimpse_base_size=config.glimpse,
                               n_glimpse_scale=config.n_scales,
@@ -112,7 +118,8 @@ if __name__ == '__main__':
                               max_grad_norm=5.0,
                               unit_pixel=config.unit_pixel,
                               loc_std=config.loc_std,
-                              is_transform=FLAGS.trans)
+                              # is_transform=FLAGS.trans
+                              )
     model.create_model()
 
     trainer = Trainer(model, train_data, init_lr=FLAGS.lr)

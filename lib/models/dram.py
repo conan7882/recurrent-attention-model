@@ -53,13 +53,13 @@ class DRAM(BaseModel):
 
     def _create_input(self):
         self.lr = tf.placeholder(tf.float32, name="lr")
-        self.label = tf.placeholder(tf.float32, 
-                                    [None, 4],
-                                    name="label")
+        # self.label = tf.placeholder(tf.float32, 
+        #                             [None, 4],
+        #                             name="label")
         self.image = tf.placeholder(tf.float32,
                                     [None, None, None, self._n_channel],
                                     name="image")
-        self.cls_label = tf.placeholder(tf.int64, [None], name="cls_label")
+        self.label = tf.placeholder(tf.int64, [None], name="label")
 
     def _core_net(self):
         self.layers['retina_reprsent'] = []
@@ -242,7 +242,7 @@ class DRAM(BaseModel):
 
     def _REINFORCE(self):
         with tf.name_scope('REINFORCE'):
-            labels = self.cls_label
+            labels = self.label
             pred = self.layers['pred']
             reward = tf.stop_gradient(tf.cast(tf.equal(pred, labels), tf.float32))
             self.reward = reward
@@ -285,7 +285,7 @@ class DRAM(BaseModel):
 
     def _cls_loss(self):
         with tf.name_scope('class_cross_entropy'):
-            labels = self.cls_label
+            labels = self.label
             # if self.is_training:
                 # label = tf.tile(label, [self._n_l_sample])
             logits = self.layers['cls_logits']
@@ -339,7 +339,7 @@ class DRAM(BaseModel):
         return train_op
 
     def get_accuracy(self):
-        labels = self.cls_label
+        labels = self.label
         pred = self.layers['pred']
         return tf.reduce_mean(tf.cast(tf.equal(pred, labels), tf.float32))
         # return tf.reduce_mean(tf.cast(self.layers['reward'], tf.float32))
