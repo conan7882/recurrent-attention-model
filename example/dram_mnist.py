@@ -113,7 +113,7 @@ if __name__ == '__main__':
 
             batch_data = valid_data.next_batch_dict()
             loc_list, pred, input_im, glimpses = sess.run(
-                [model.layers['l_sample'], model.layers['pred'],
+                [model.layers['loc_sample'], model.layers['pred'],
                 model.image, model.layers['retina_reprsent']],
                 feed_dict={model.image: batch_data['im']})
                 

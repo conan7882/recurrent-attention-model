@@ -24,7 +24,7 @@ class DRAM(BaseModel):
                  glimpse_base_size,
                  n_glimpse_scale,
                  unit_pixel,
-                 n_class=2,
+                 n_class=10,
                  coarse_size=64):
         self._n_class = n_class
         self._n_channel = n_channel
@@ -304,6 +304,7 @@ class DRAM(BaseModel):
     def _get_loss(self):
         self.REINFORCE_loss = self._REINFORCE()
         self.cls_loss = self._cls_loss()
+        # return self.REINFORCE_loss + self.cls_loss
         return 0.0001 * self.REINFORCE_loss + self.cls_loss
 
     def get_train_op(self):

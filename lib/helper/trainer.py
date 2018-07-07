@@ -12,7 +12,7 @@ import matplotlib.patches as patches
 
 
 class Trainer(object):
-    def __init__(self, model, train_data, init_lr=1e-3):
+    def __init__(self, model, train_data, init_lr=1e-4):
         self._model = model
         self._train_data = train_data
         self._lr = init_lr
@@ -30,6 +30,7 @@ class Trainer(object):
 
     def train_epoch(self, sess, summary_writer=None):
         self._model.set_is_training(True)
+        self._lr = self._lr * 0.97
         # self._lr = np.maximum(self._lr * 0.97, 1e-4)
 
         cur_epoch = self._train_data.epochs_completed
