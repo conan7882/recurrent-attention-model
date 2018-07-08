@@ -25,7 +25,8 @@ class DRAM(BaseModel):
                  n_glimpse_scale,
                  unit_pixel,
                  n_class=10,
-                 coarse_size=64):
+                 coarse_size=64,
+                 loc_weight=1e-3):
         self._n_class = n_class
         self._n_channel = n_channel
         self._im_size = layers.get_shape2D(im_size)
@@ -39,6 +40,7 @@ class DRAM(BaseModel):
         self._l_std = location_std
         self._g_size = glimpse_base_size
         self._g_n = n_glimpse_scale
+        self._lw = loc_weight
 
         # assume square images
         # self._unit_pixel = unit_pixel
@@ -46,10 +48,12 @@ class DRAM(BaseModel):
 
         self.layers = {}
         self.set_is_training(True)
-
+        
     def create_model(self):
+        
         self._create_input()
-        self._core_net()
+        with tf.variable_scope('core_net', reuse=tf.AUTO_REUSE):
+            self._core_net(self.image)
 
     def _create_input(self):
         self.lr = tf.placeholder(tf.float32, name="lr")
@@ -61,7 +65,19 @@ class DRAM(BaseModel):
                                     name="image")
         self.label = tf.placeholder(tf.int64, [None], name="label")
 
-    def _core_net(self):
+    def create_test_model(self):
+        self.set_is_training(False)
+        self._create_test_input()
+        with tf.variable_scope('core_net', reuse=tf.AUTO_REUSE):
+            self._core_net(self.test_image)
+
+    def _create_test_input(self):
+        self.label = tf.placeholder(tf.int64, [None], name="label")
+        self.test_image = tf.placeholder(tf.float32,
+                                         [None, None, None, self._n_channel],
+                                         name="test_image")
+
+    def _core_net(self, inputs):
         self.layers['retina_reprsent'] = []
         self.layers['loc_sample'] = []
         self.layers['loc_mean'] = []
@@ -77,9 +93,9 @@ class DRAM(BaseModel):
             rnn_bottom = _make_cell(self._n_hidden[0])
             rnn_top = _make_cell(self._n_hidden[1])
 
-            context = self._context_net(self.image)
+            context = self._context_net(inputs)
             rnn_top_state = context
-            b_size = tf.shape(self.image)[0]
+            b_size = tf.shape(inputs)[0]
             rnn_bottom_state = rnn_bottom.zero_state(b_size, tf.float32)
 
         for step_id in range(0, self._n_step):
@@ -97,6 +113,8 @@ class DRAM(BaseModel):
                 if step_id < self._n_step - 1:
                     self.layers['rnn_outputs'].append(rnn_out)
                     l_mean, l_sample = self._emission_net(rnn_out)
+                    if self.is_training == False:
+                        l_sample = l_mean
                     self.layers['loc_sample'].append(l_sample)
                     self.layers['loc_mean'].append(l_mean)
                     glimpse_out = self._glimpse_net(l_sample)
@@ -265,7 +283,7 @@ class DRAM(BaseModel):
             return loss
 
     def _comp_baselines(self):
-        with tf.variable_scope('baseline'):
+        with tf.variable_scope('baseline', reuse=tf.AUTO_REUSE):
             # core net does not trained through baseline loss
             rnn_outputs = tf.stop_gradient(self.layers['rnn_outputs'])
             baselines = []
@@ -305,7 +323,7 @@ class DRAM(BaseModel):
         self.REINFORCE_loss = self._REINFORCE()
         self.cls_loss = self._cls_loss()
         # return self.REINFORCE_loss + self.cls_loss
-        return 0.0001 * self.REINFORCE_loss + self.cls_loss
+        return self._lw * self.REINFORCE_loss + self.cls_loss
 
     def get_train_op(self):
         # global_step = tf.get_variable(

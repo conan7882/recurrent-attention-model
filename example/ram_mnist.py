@@ -120,7 +120,7 @@ if __name__ == '__main__':
                               loc_std=config.loc_std,
                               # is_transform=FLAGS.trans
                               )
-    model.create_model()
+    
 
     trainer = Trainer(model, train_data, init_lr=FLAGS.lr)
     writer = tf.summary.FileWriter(SAVE_PATH)

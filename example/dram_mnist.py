@@ -11,7 +11,7 @@ import platform
 import scipy.misc
 import argparse
 import matplotlib.pyplot as plt
-from read_mnist import trans_mnist
+import read_mnist as read
 
 sys.path.append('../')
 from lib.models.dram import DRAM
@@ -53,6 +53,8 @@ def get_args():
                         help='unit_pixel')
     parser.add_argument('--scale', type=int, default=2,
                         help='scale of glimpse')
+    parser.add_argument('--lw', type=float, default=1e-3,
+                        help='weight of REINFORCE loss')
     
     return parser.parse_args()
 
@@ -65,7 +67,8 @@ if __name__ == '__main__':
     b_size = FLAGS.batch
     im_size = 100
 
-    train_data, valid_data = trans_mnist(trans_size=im_size, batch_size=b_size)
+    # train_data, valid_data = read.trans_mnist(trans_size=im_size, batch_size=b_size)
+    train_data, valid_data = read.two_digits_mnist(canvas_size=im_size, batch_size=b_size)
 
     model = DRAM(im_size=im_size,
                  n_channel=1,
@@ -76,9 +79,12 @@ if __name__ == '__main__':
                  glimpse_base_size=FLAGS.glimpse,
                  n_glimpse_scale=FLAGS.scale,
                  unit_pixel=FLAGS.pixel,
-                 n_class=10,
-                 coarse_size=32)
+                 n_class=55,
+                 coarse_size=32,
+                 loc_weight=FLAGS.lw)
+    # model.create_model()
     model.create_model()
+    # model.create_test_model()
 
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(SAVE_PATH)
@@ -89,6 +95,7 @@ if __name__ == '__main__':
         sessconfig.gpu_options.allow_growth = True
         with tf.Session(config=sessconfig) as sess:
             sess.run(tf.global_variables_initializer())
+            writer.add_graph(sess.graph)
             for epoch_id in range(0, FLAGS.epoch):
                 trainer.train_epoch(sess, summary_writer=writer)
                 trainer.valid_epoch(sess, valid_data, batch_size=128)

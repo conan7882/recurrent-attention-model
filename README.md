@@ -18,7 +18,15 @@
 - The reward baseline network is trained by the MSE loss between baseline and reward.  
 
 ## Result
+|     | # Glimpse	| Glimplse Size | Glimplse Scale	| Batch Size | Location std | Unit Pixel |
+|-------------|-------|-------|-------|-------|-------|-------|
+| **Centered MNIST**    | 6 | 8 | 1 | 128 | 0.03 | 12 |
+| **Translated MNIST** | 6 | 12 | 3 | 128 | 0.03 | 26 |
+
+Unit pixel is the number of pixels of unit width in the coordinate system estimated by location network. The range of coordinate is [-1, 1] for both experiments. That means the center of glimpse region cannot reach the edge of the image.
+
 ### Centered MNIST
+
 ![center](figs/center.gif)
 
 ### Translated MNIST

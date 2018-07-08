@@ -29,7 +29,8 @@ def linear(out_dim,
            init_b=tf.zeros_initializer(),
            name='Linear',
            nl=tf.identity):
-    with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+    # with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+    with tf.variable_scope(name):
         if inputs is None:
             assert layer_dict is not None
             inputs = layer_dict['cur_input']

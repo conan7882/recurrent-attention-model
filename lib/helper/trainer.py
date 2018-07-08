@@ -13,9 +13,11 @@ import matplotlib.patches as patches
 
 class Trainer(object):
     def __init__(self, model, train_data, init_lr=1e-4):
+
         self._model = model
         self._train_data = train_data
         self._lr = init_lr
+        self._min_lr = init_lr / 100.
 
         self._train_op = model.get_train_op()
         self._loss_op = model.get_loss()
@@ -30,7 +32,7 @@ class Trainer(object):
 
     def train_epoch(self, sess, summary_writer=None):
         self._model.set_is_training(True)
-        self._lr = self._lr * 0.97
+        self._lr = np.maximum(self._lr * 0.985, self._min_lr)
         # self._lr = np.maximum(self._lr * 0.97, 1e-4)
 
         cur_epoch = self._train_data.epochs_completed
@@ -72,7 +74,7 @@ class Trainer(object):
             summary_writer.add_summary(cur_summary, self.global_step)
 
     def valid_epoch(self, sess, dataflow, batch_size):
-        self._model.set_is_training(False)
+        # self._model.set_is_training(False)
         dataflow.setup(epoch_val=0, batch_size=batch_size)
 
         step = 0
@@ -91,7 +93,7 @@ class Trainer(object):
         print('valid loss: {:.4f}, accuracy: {:.4f}'
               .format(loss_sum * 1.0 / step, acc_sum * 1.0 / step))
 
-        self._model.set_is_training(True)
+        # self._model.set_is_training(True)
 
     def test_batch(self, sess, batch_data, unit_pixel, size, scale, save_path=''):
         def draw_bbx(ax, x, y):

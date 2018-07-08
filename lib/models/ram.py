@@ -38,13 +38,13 @@ class RAMClassification(BaseModel):
         self._n_class = n_class
         self._max_grad_norm = max_grad_norm
 
-        self.set_is_training(True)
-
         self.layers = {}
 
     def create_model(self):
+        self.set_is_training(True)
         self._create_input()
-        self.core_net()
+        with tf.variable_scope('core_net', reuse=tf.AUTO_REUSE):
+            self.core_net(self.image)
 
     def _create_input(self):
         self.lr = tf.placeholder(tf.float32, name='lr')
@@ -53,13 +53,25 @@ class RAMClassification(BaseModel):
                                     [None, None, None, self._n_channel],
                                     name='image')
 
-    def core_net(self):
+    def create_test_model(self):
+        self.set_is_training(False)
+        self._create_test_input()
+        with tf.variable_scope('core_net', reuse=tf.AUTO_REUSE):
+            self.core_net(self.test_image)
+
+    def _create_test_input(self):
+        self.label = tf.placeholder(tf.int64, [None], name='label')
+        self.test_image = tf.placeholder(tf.float32,
+                                         [None, None, None, self._n_channel],
+                                         name='test_image')
+
+    def core_net(self, inputs):
         self.layers['loc_mean'] = []
         self.layers['loc_sample'] = []
         self.layers['rnn_outputs'] = []
         self.layers['retina_reprsent'] = []
 
-        inputs_im = self.image
+        inputs_im = inputs
         cell_size = 256
         batch_size = tf.shape(inputs_im)[0]
 
@@ -80,7 +92,7 @@ class RAMClassification(BaseModel):
         # RNN of core net
         h_prev = tf.zeros((batch_size, cell_size))
         for step_id in range(0, self._n_step):
-            with tf.variable_scope('core_net'):
+            with tf.variable_scope('step', reuse=tf.AUTO_REUSE):
                 lh = L.linear(out_dim=cell_size, inputs=h_prev, name='lh')
                 lg = L.linear(out_dim=cell_size, inputs=glimpse_out, name='lg')
                 h = tf.nn.relu(lh + lg, name='h')
