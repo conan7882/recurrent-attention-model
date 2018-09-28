@@ -17,7 +17,6 @@ from lib.model.ram import RAMClassification
 from lib.helper.trainer import Trainer
 from lib.helper.predictor import Predictor
 
-DATA_PATH = '/home/qge2/workspace/data/MNIST_data/'
 SAVE_PATH = '/home/qge2/workspace/data/out/ram/'
 RESULT_PATH = '/home/qge2/workspace/data/out/ram/'
 

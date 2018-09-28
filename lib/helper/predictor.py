@@ -21,7 +21,6 @@ class Predictor(object):
 
     def evaluate(self, sess, dataflow, batch_size=None):
         self._model.set_is_training(False)
-        # dataflow.setup(epoch_val=0, batch_size=batch_size)
 
         step = 0
         acc_sum = 0
