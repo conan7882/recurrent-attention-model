@@ -120,7 +120,7 @@ def train():
         writer.add_graph(sess.graph)
         for step in range(0, config.epoch):
             trainer.train_epoch(sess, summary_writer=writer)
-            trainer.valid_epoch(sess, valid_data, config.batch)
+            trainer.valid_epoch(sess, valid_data, config.batch, summary_writer=writer)
             saver.save(sess, 
                        '{}ram-{}-mnist-step-{}'
                        .format(SAVE_PATH, name, config.step),
