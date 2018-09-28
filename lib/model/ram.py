@@ -4,15 +4,15 @@
 # Author: Qian Ge <geqian1001@gmail.com>
 
 import tensorflow as tf
-from tensorcv.models.base import BaseModel
 
 from lib.utils.utils import get_shape2D
 from lib.utils.tfutils import sample_normal_single
 import lib.model.layers as L
 
 
-class RAMClassification(BaseModel):
+class RAMClassification(object):
     def __init__(self,
+                 im_size,
                  im_channel,
                  glimpse_base_size,
                  n_glimpse_scale,
@@ -24,9 +24,9 @@ class RAMClassification(BaseModel):
                  unit_pixel,
                  is_transform=False,
                  transform_size=60):
-
+        self._im_size = im_size
         self._is_transform = is_transform
-        self._trans_size = transform_size
+        # self._trans_size = transform_size
         self._n_channel = im_channel
         self._g_size = glimpse_base_size
         self._g_n = n_glimpse_scale
@@ -37,15 +37,7 @@ class RAMClassification(BaseModel):
         self._n_class = n_class
         self._max_grad_norm = max_grad_norm
 
-        self.set_is_training(True)
-
-    def create_model(self):
-        self._create_input()
-        self.layers = {}
-        self.core_net(self.input_im)
-
-    def _create_input(self):
-        self.lr = tf.placeholder(tf.float32, name='lr')
+    def _create_predict_input(self):
         self.label = tf.placeholder(tf.int64, [None], name='label')
         self.image = tf.placeholder(tf.float32,
                                     [None, None, None, self._n_channel],
@@ -57,17 +49,39 @@ class RAMClassification(BaseModel):
             self.input_im = self.image
         self.input_label = self.label
 
+    def create_predict_model(self):
+        self.set_is_training(False)
+        self._create_predict_input()
+        self.layers = {}
+        self.core_net(self.input_im)
+
+    def _create_train_input(self):
+        self.lr = tf.placeholder(tf.float32, name='lr')
+        self.label = tf.placeholder(tf.int64, [None], name='label')
+        self.image = tf.placeholder(tf.float32,
+                                    [None, None, None, self._n_channel],
+                                    name='image')
+        if self._is_transform:
+            self.input_im = self._translate_image(self.image)
+        else:
+            self.input_im = self.image
+        self.input_label = self.label
+
+    def create_train_model(self):
+        self.set_is_training(True)
+        self._create_train_input()
+        self.layers = {}
+        self.core_net(self.input_im)
+
     def _translate_image(self, inputs_im):
-        """ Generate translate images """
+        """ Generate random translate images """
         with tf.name_scope('translation'):
-            trans_offset = int((self._trans_size - 28) / 2)
+            trans_offset = int((self._im_size - 28) / 2)
             pad_im = tf.pad(
                 inputs_im,
                 paddings=tf.constant(
-                    [[0, 0], 
-                     [trans_offset, trans_offset],
-                     [trans_offset, trans_offset],
-                     [0, 0]]),
+                    [[0, 0], [trans_offset, trans_offset],
+                     [trans_offset, trans_offset], [0, 0]]),
                 mode='CONSTANT',
                 name='pad_im',
                 constant_values=0
@@ -77,11 +91,9 @@ class RAMClassification(BaseModel):
             translations = tf.random_uniform(
                 (batch_size, 2), minval=-trans_offset, maxval=trans_offset)
             trans_im = tf.contrib.image.translate(
-                pad_im,
-                translations,
+                pad_im, translations,
                 interpolation='NEAREST',
-                name=None
-                )
+                name=None)
 
             self.pad_im = trans_im
             return trans_im
@@ -140,49 +152,7 @@ class RAMClassification(BaseModel):
 
         self.layers['class_logists'] = action
         self.layers['prob'] = tf.nn.softmax(logits=action, name='prob')
-        self.layers['pred'] = tf.argmax(action, axis=1)    
-
-    def get_accuracy(self):
-        label = self.input_label
-        if self.is_training:
-                label = tf.tile(label, [self._n_l_sample])
-        pred = self.layers['pred']
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(pred, label), tf.float32))
-        return accuracy
-
-    def get_train_op(self):
-        global_step = tf.get_variable(
-            'global_step',
-            [],
-            initializer=tf.constant_initializer(0),
-            trainable=False)
-        cur_lr = tf.train.exponential_decay(self.lr,
-                                            global_step=global_step,
-                                            # decay_steps=200,
-                                            decay_steps=500,
-                                            # decay_steps=1000,
-                                            decay_rate=0.97,
-                                            # decay_rate=0.99,
-                                            staircase=True,
-                                            )
-        cur_lr = tf.maximum(cur_lr, self.lr / 10.0)
-        self.cur_lr = cur_lr
-
-        loss = self.get_loss()
-        var_list = tf.trainable_variables()
-        grads = tf.gradients(loss, var_list)
-        [tf.summary.histogram('gradient/' + var.name, grad, 
-         collections = [tf.GraphKeys.SUMMARIES])
-         for grad, var in zip(grads, var_list)]
-        grads, _ = tf.clip_by_global_norm(grads, self._max_grad_norm)
-        opt = tf.train.AdamOptimizer(cur_lr)
-        # opt = tf.train.RMSPropOptimizer(learning_rate=cur_lr)
-        train_op = opt.apply_gradients(zip(grads, var_list),
-                                       global_step=global_step)
-        return train_op
-
-    def get_summary(self):
-        return tf.summary.merge_all() 
+        self.layers['pred'] = tf.argmax(action, axis=1)
 
     def glimpse_net(self, inputs, l_sample):
         """
@@ -201,9 +171,9 @@ class RAMClassification(BaseModel):
             l_sample = tf.clip_by_value(l_sample, -1.0, 1.0)
 
             if self._is_transform:
-                l_sample_adj = l_sample * 1.0 * self._unit_pixel / (self._trans_size / 2 + max_r)
+                l_sample_adj = l_sample * 1.0 * self._unit_pixel / (self._im_size / 2 + max_r)
             else:
-                l_sample_adj = l_sample * 1.0 * self._unit_pixel / (14 + max_r)
+                l_sample_adj = l_sample * 1.0 * self._unit_pixel / (self._im_size / 2 + max_r)
             
             retina_reprsent = []
             for g_id in range(0, self._g_n):
@@ -250,12 +220,45 @@ class RAMClassification(BaseModel):
             act = L.Linear(core_state, self._n_class, name='act')
             return act
 
-    def get_loss(self):
-        try:
-            return self.loss
-        except AttributeError:
-            self.loss = self._get_loss()
-            return self.loss
+    def _comp_baselines(self):
+        with tf.variable_scope('baseline'):
+            # core net does not trained through baseline loss
+            rnn_outputs = tf.stop_gradient(self.layers['rnn_outputs'])
+            baselines = []
+            for step_id in range(0, self._n_step-1):
+                b = L.Linear(rnn_outputs[step_id], 1, name='baseline')
+                b = tf.squeeze(b, axis=-1)
+                baselines.append(b)
+            
+            baselines = tf.stack(baselines) # [n_step, b_size]
+            baselines = tf.transpose(baselines) # [b_size, n_step]
+            return baselines
+
+    def get_train_op(self):
+        global_step = tf.get_variable(
+            'global_step',
+            [],
+            initializer=tf.constant_initializer(0),
+            trainable=False)
+        cur_lr = tf.train.exponential_decay(self.lr,
+                                            global_step=global_step,
+                                            decay_steps=500,
+                                            decay_rate=0.97,
+                                            staircase=True)
+        cur_lr = tf.maximum(cur_lr, self.lr / 10.0)
+        self.cur_lr = cur_lr
+
+        loss = self.get_loss()
+        var_list = tf.trainable_variables()
+        grads = tf.gradients(loss, var_list)
+        # [tf.summary.histogram('gradient/' + var.name, grad, 
+        #  collections = [tf.GraphKeys.SUMMARIES])
+        #  for grad, var in zip(grads, var_list)]
+        grads, _ = tf.clip_by_global_norm(grads, self._max_grad_norm)
+        opt = tf.train.AdamOptimizer(cur_lr)
+        train_op = opt.apply_gradients(zip(grads, var_list),
+                                       global_step=global_step)
+        return train_op
 
     def _get_loss(self):
         return self._cls_loss() + self._REINFORCE()
@@ -297,16 +300,23 @@ class RAMClassification(BaseModel):
             loss = -REINFORCE_reward + b_mse
             return loss
 
-    def _comp_baselines(self):
-        with tf.variable_scope('baseline'):
-            # core net does not trained through baseline loss
-            rnn_outputs = tf.stop_gradient(self.layers['rnn_outputs'])
-            baselines = []
-            for step_id in range(0, self._n_step-1):
-                b = L.Linear(rnn_outputs[step_id], 1, name='baseline')
-                b = tf.squeeze(b, axis=-1)
-                baselines.append(b)
-            
-            baselines = tf.stack(baselines) # [n_step, b_size]
-            baselines = tf.transpose(baselines) # [b_size, n_step]
-            return baselines
+    def get_loss(self):
+        try:
+            return self.loss
+        except AttributeError:
+            self.loss = self._get_loss()
+            return self.loss
+
+    def get_summary(self):
+        return tf.summary.merge_all() 
+
+    def get_accuracy(self):
+        label = self.input_label
+        if self.is_training:
+                label = tf.tile(label, [self._n_l_sample])
+        pred = self.layers['pred']
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(pred, label), tf.float32))
+        return accuracy
+
+    def set_is_training(self, is_training=True):
+        self.is_training = is_training

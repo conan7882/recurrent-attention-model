@@ -10,14 +10,17 @@ import platform
 import scipy.misc
 import argparse
 
+import read_mnist as loader
 sys.path.append('../')
 from lib.dataflow.mnist import MNISTData 
 from lib.model.ram import RAMClassification
 from lib.helper.trainer import Trainer
+from lib.helper.predictor import Predictor
 
 DATA_PATH = '/home/qge2/workspace/data/MNIST_data/'
 SAVE_PATH = '/home/qge2/workspace/data/out/ram/'
 RESULT_PATH = '/home/qge2/workspace/data/out/ram/'
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -25,12 +28,10 @@ def get_args():
                         help='Run prediction')
     parser.add_argument('--train', action='store_true',
                         help='Train the model')
-    parser.add_argument('--test', action='store_true',
-                        help='Test')
-    parser.add_argument('--trans', action='store_true',
-                        help='Transform image')
-    parser.add_argument('--center', action='store_true',
-                        help='Center')
+    parser.add_argument('--eval', action='store_true',
+                        help='Evaluate the model')
+    parser.add_argument('--dataset', type=str, default='center',
+                        help='Use original or tranlated MNIST ("center" or "translate")')
 
     parser.add_argument('--step', type=int, default=1,
                         help='Number of glimpse')
@@ -64,6 +65,8 @@ class config_center():
     epoch = 1000
     loc_std = 0.03
     unit_pixel = 12
+    im_size = 28
+    trans = False
 
 class config_transform():
     step = 6
@@ -74,35 +77,27 @@ class config_transform():
     epoch = 2000
     loc_std = 0.03
     unit_pixel = 26
+    im_size = 60
+    trans = True
 
-if __name__ == '__main__':
+def get_config_data():
     FLAGS = get_args()
-    if FLAGS.trans:
+    if FLAGS.dataset == 'translate':
         name = 'trans'
         config = config_transform()
-    elif FLAGS.center:
+    else:
         name = 'centered'
         config = config_center()
-    else:
-        FLAGS.trans = True
-        name = 'custom'
-        class config_FLAGS():
-            step = FLAGS.step
-            sample = FLAGS.sample
-            glimpse = FLAGS.glimpse
-            n_scales = FLAGS.scale
-            batch = FLAGS.batch
-            epoch = FLAGS.epoch
-            loc_std = FLAGS.std
-            unit_pixel = FLAGS.pixel
-        config = config_FLAGS()
 
-    train_data = MNISTData('train', data_dir=DATA_PATH, shuffle=True)
-    train_data.setup(epoch_val=0, batch_size=config.batch)
-    valid_data = MNISTData('val', data_dir=DATA_PATH, shuffle=True)
-    valid_data.setup(epoch_val=0, batch_size=10)
+    train_data, valid_data = loader.original_mnist(batch_size=config.batch, shuffle=True)
+    return config, name, train_data, valid_data
 
-    model = RAMClassification(
+def train():
+    FLAGS = get_args()
+
+    config, name, train_data, valid_data = get_config_data()
+
+    model = RAMClassification(im_size=config.im_size,
                               im_channel=1,
                               glimpse_base_size=config.glimpse,
                               n_glimpse_scale=config.n_scales,
@@ -112,8 +107,8 @@ if __name__ == '__main__':
                               max_grad_norm=5.0,
                               unit_pixel=config.unit_pixel,
                               loc_std=config.loc_std,
-                              is_transform=FLAGS.trans)
-    model.create_model()
+                              is_transform=config.trans)
+    model.create_train_model()
 
     trainer = Trainer(model, train_data, init_lr=FLAGS.lr)
     writer = tf.summary.FileWriter(SAVE_PATH)
@@ -123,28 +118,92 @@ if __name__ == '__main__':
     sessconfig.gpu_options.allow_growth = True
     with tf.Session(config=sessconfig) as sess:
         sess.run(tf.global_variables_initializer())
-        if FLAGS.train:
-            writer.add_graph(sess.graph)
-            for step in range(0, config.epoch):
-                trainer.train_epoch(sess, summary_writer=writer)
-                trainer.valid_epoch(sess, valid_data, config.batch)
-                saver.save(sess, 
-                           '{}ram-{}-mnist-step-{}'
-                           .format(SAVE_PATH, name, config.step),
-                           global_step=step)
-                writer.close()
+        writer.add_graph(sess.graph)
+        for step in range(0, config.epoch):
+            trainer.train_epoch(sess, summary_writer=writer)
+            trainer.valid_epoch(sess, valid_data, config.batch)
+            saver.save(sess, 
+                       '{}ram-{}-mnist-step-{}'
+                       .format(SAVE_PATH, name, config.step),
+                       global_step=step)
+            writer.close()
 
-        if FLAGS.predict:
-            valid_data.setup(epoch_val=0, batch_size=20)
-            saver.restore(sess, 
-                          '{}ram-{}-mnist-step-6-{}'
-                          .format(SAVE_PATH, name, FLAGS.load))
+def predict():
+    FLAGS = get_args()
+
+    config, name, train_data, valid_data = get_config_data()
+
+    model = RAMClassification(im_size=config.im_size,
+                              im_channel=1,
+                              glimpse_base_size=config.glimpse,
+                              n_glimpse_scale=config.n_scales,
+                              n_loc_sample=config.sample,
+                              n_step=config.step,
+                              n_class=10,
+                              max_grad_norm=5.0,
+                              unit_pixel=config.unit_pixel,
+                              loc_std=config.loc_std,
+                              is_transform=config.trans)
+    model.create_predict_model()
+
+    predictor = Predictor(model)
+    saver = tf.train.Saver()
+
+    sessconfig = tf.ConfigProto()
+    sessconfig.gpu_options.allow_growth = True
+    with tf.Session(config=sessconfig) as sess:
+        sess.run(tf.global_variables_initializer())
+        
+        saver.restore(sess, 
+                      '{}ram-{}-mnist-step-6-{}'
+                      .format(SAVE_PATH, name, FLAGS.load))
             
-            batch_data = valid_data.next_batch_dict()
-            trainer.test_batch(
-                sess,
-                batch_data,
-                unit_pixel=config.unit_pixel,
-                size=config.glimpse,
-                scale=config.n_scales,
-                save_path=RESULT_PATH)
+        batch_data = valid_data.next_batch_dict()
+        predictor.test_batch(
+            sess,
+            batch_data,
+            unit_pixel=config.unit_pixel,
+            size=config.glimpse,
+            scale=config.n_scales,
+            save_path=RESULT_PATH)
+
+def evaluate():
+    FLAGS = get_args()
+
+    config, name, train_data, valid_data = get_config_data()
+
+    model = RAMClassification(im_size=config.im_size,
+                              im_channel=1,
+                              glimpse_base_size=config.glimpse,
+                              n_glimpse_scale=config.n_scales,
+                              n_loc_sample=config.sample,
+                              n_step=config.step,
+                              n_class=10,
+                              max_grad_norm=5.0,
+                              unit_pixel=config.unit_pixel,
+                              loc_std=config.loc_std,
+                              is_transform=config.trans)
+    model.create_predict_model()
+
+    predictor = Predictor(model)
+    saver = tf.train.Saver()
+
+    sessconfig = tf.ConfigProto()
+    sessconfig.gpu_options.allow_growth = True
+    with tf.Session(config=sessconfig) as sess:
+        sess.run(tf.global_variables_initializer())
+        
+        saver.restore(sess, 
+                      '{}ram-{}-mnist-step-6-{}'
+                      .format(SAVE_PATH, name, FLAGS.load))
+            
+        predictor.evaluate(sess, valid_data)
+
+if __name__ == '__main__':
+    FLAGS = get_args()
+    if FLAGS.train:
+        train()
+    if FLAGS.predict:
+        predict()
+    if FLAGS.eval:
+        evaluate()

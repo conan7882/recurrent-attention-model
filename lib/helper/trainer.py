@@ -22,18 +22,13 @@ class Trainer(object):
         self._accuracy_op = model.get_accuracy()
         self._sample_loc_op = model.layers['loc_sample']
         self._pred_op = model.layers['pred']
-        self._sum_op = model.get_summary()
-
         self._lr_op = model.cur_lr
 
         self.global_step = 0
 
     def train_epoch(self, sess, summary_writer=None):
         self._model.set_is_training(True)
-        # self._lr = np.maximum(self._lr * 0.97, 1e-4)
-
         cur_epoch = self._train_data.epochs_completed
-
         step = 0
         loss_sum = 0
         acc_sum = 0
@@ -44,8 +39,8 @@ class Trainer(object):
             batch_data = self._train_data.next_batch_dict()
             im = batch_data['data']
             label = batch_data['label']
-            _, loss, acc, cur_lr, cur_summary = sess.run(
-                [self._train_op, self._loss_op, self._accuracy_op, self._lr_op, self._sum_op], 
+            _, loss, acc, cur_lr = sess.run(
+                [self._train_op, self._loss_op, self._accuracy_op, self._lr_op], 
                 feed_dict={self._model.image: im,
                            self._model.label: label,
                            self._model.lr: self._lr})
@@ -68,7 +63,6 @@ class Trainer(object):
             s.value.add(tag='train_loss', simple_value=loss_sum * 1.0 / step)
             s.value.add(tag='train_accuracy', simple_value=acc_sum * 1.0 / step)
             summary_writer.add_summary(s, self.global_step)
-            summary_writer.add_summary(cur_summary, self.global_step)
 
     def valid_epoch(self, sess, dataflow, batch_size):
         self._model.set_is_training(False)
@@ -130,7 +124,6 @@ class Trainer(object):
                     x = loc[1] - side - offset
                     y = loc[0] - side - offset
                     draw_bbx(ax, x, y)
-                # plt.show()
                 for i in range(0, scale):
                     scipy.misc.imsave(
                         os.path.join(save_path,'im_{}_glimpse_{}_step_{}.png').format(im_id, i, step_id),

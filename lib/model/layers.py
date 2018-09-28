@@ -13,21 +13,17 @@ def Linear(inputs, out_dim, name='Linear', nl=tf.identity):
         in_dim = inputs.get_shape().as_list()[1]
         weights = tf.get_variable('weights',
                                   shape=[in_dim, out_dim],
-                                  # dtype=None,
                                   initializer=None,
                                   regularizer=None,
                                   trainable=True)
         biases = tf.get_variable('biases',
                                   shape=[out_dim],
-                                  # dtype=None,
                                   initializer=None,
                                   regularizer=None,
                                   trainable=True)
-        print('init: {}'.format(weights))
         act = tf.nn.xw_plus_b(inputs, weights, biases)
 
         return nl(act, name='output')
-
 
 def batch_flatten(x):
     """
