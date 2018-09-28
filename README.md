@@ -37,7 +37,7 @@ Hyperparameters
 
 *name* | *value* |*name* | *value* |
 :---| :---| :--- | :---|
-image size 60 x 60 | step | 6 |
+image size | 60 x 60 | step | 6 |
 smallest glimpse | 12 |glimpse scales | 3 |
 location std |0.03| pixel to unit width | 26 |
 Batch Size | 128 |Max Epoch | 2000 |
