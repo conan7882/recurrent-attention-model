@@ -1,9 +1,11 @@
 # Recurrent Visual Attention Model (RAM)
- - A TensorFlow implementation of [Recurrent Models of Visual Attention](https://arxiv.org/abs/1406.6247) (NIPS 14)
+ - A TensorFlow implementation of [Recurrent Models of Visual Attention](https://arxiv.org/abs/1406.6247) (NIPS 14).
  - The the model from the paper:
  ![ram](figs/model.png)
+ - For image classification/recognition tasks, this model will look at different location of the original image for several steps before making the final prediction. Besides reduces the computational complexity, this type of model also privodes more explainable results.
  - The core network is an RNN. It takes the representation from glimpse network and previous hidden state as input and then produces the new hidden state.
- - The glimpse network and action network takes the new hidden state as input and produce new glimpse representation and action.
+ - The location network and action network takes the new hidden state of the RNN as input and produce new location for the glimpse network to extract the new representation and the new action, respectively.
+ - This repository includes experiments on the original MNIST and the translated MNIST dataset. The classification accuracy on the translated MNIST dataset is 97.82%.
  
 ## Requirements
 - Python 3.3+
@@ -13,7 +15,7 @@
 - The RAM model is defined in [`lib/model/ram.py`](lib/model/ram.py).
 - An example of MNIST dataset classification is in [`example/mnist.py`](example/mnist.py).
 - The action network, core network and glimpse network are trained by the classification cross entropy loss.
-- The location network is trained by [REINFORCE](http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf).
+- The location network is trained through the algorithm [REINFORCE](http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf).
 - The reward baseline network is trained by the MSE loss between baseline and reward.  
 
 ## Result
@@ -29,9 +31,10 @@ location std |0.03| pixel to unit width | 12 |
 Batch Size | 128 |Max Epoch | 1000 |
 Learning Rate <td colspan=3>1e-3 (initial) and decay with 0.97 for every 500 steps |
 
+- Locations of glimpse at different steps
 ![center](figs/center.gif)
 
-### Translated MNIST
+### Translated MNIST (accuracy 97.82%)
 
 Hyperparameters
 
@@ -42,7 +45,8 @@ smallest glimpse | 12 |glimpse scales | 3 |
 location std |0.03| pixel to unit width | 26 |
 Batch Size | 128 |Max Epoch | 2000 |
 Learning Rate <td colspan=3>1e-3 (initial) and decay with 0.97 for every 500 steps |
- 
+
+- Locations of glimpse at different steps
 ![trans](figs/trans.gif)
 
 ## Usage
